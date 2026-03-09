@@ -15,7 +15,7 @@ public class StockService
     private readonly string _apiKey;
 
     // Передавайте ключ в конструкторе. Для локального теста можно временно указать строку тут.
-    public StockService(string apiKey = "Ключ")
+    public StockService(string apiKey = "key")
     {
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -57,6 +57,20 @@ public class StockService
             Console.WriteLine($"[StockService] Exception for {symbol}: {ex.Message}");
             return null;
         }
+    }
+
+    public async Task<List<SearchResult>> SearchStocksAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<SearchResult>();
+
+        var url = $"https://finnhub.io/api/v1/search?q={query}&token={"key"}";
+
+        var response = await _httpClient.GetStringAsync(url);
+
+        var data = JsonSerializer.Deserialize<SearchResponse>(response);
+
+        return data?.Result ?? new List<SearchResult>();
     }
 
     private class FinnhubQuote

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,27 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
 
     public ObservableCollection<Stock> Stocks { get; } = new();
+    public ObservableCollection<SearchResult> SearchResults { get; } = new();
+
+    private string _searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (_searchText == value) return;
+            _searchText = value;
+            OnPropertyChanged();
+            Search();
+        }
+    }
+
+    private bool _isSearching;
+    public bool IsSearching
+    {
+        get => _isSearching;
+        set => SetProperty(ref _isSearching, value);
+    }
 
     public ICommand RefreshCommand { get; }
 
@@ -28,6 +50,7 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetProperty(ref _isRefreshing, value);
     }
 
+    // Конструктор: можно передать реальный StockService или оставить пустым для Mock
     public MainViewModel(StockService? service = null)
     {
         _service = service ?? new MockStockService();
@@ -52,7 +75,6 @@ public class MainViewModel : INotifyPropertyChanged
     // Pull-to-refresh (с индикатором)
     private async Task RefreshCommandExecute()
     {
-        // Попытка выполнить только одну ручную операцию
         if (!await _refreshLock.WaitAsync(0))
         {
             Console.WriteLine("[VM] Manual refresh skipped because another refresh is running");
@@ -114,7 +136,6 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 await Task.Delay(TimeSpan.FromSeconds(60)); // интервал автообновления
 
-                // Попробовать захватить лок, но не ждать. Если не удалось — пропустить этот проход.
                 if (!await _refreshLock.WaitAsync(0))
                 {
                     Console.WriteLine("[VM] Auto refresh skipped because manual refresh is running");
@@ -138,6 +159,80 @@ public class MainViewModel : INotifyPropertyChanged
                 await Task.Delay(5000);
             }
         }
+    }
+
+    // Поиск (вызывается при изменении SearchText)
+    private CancellationTokenSource? _searchCts;
+    private async void Search()
+    {
+        // отмена предыдущего незавершённого поиска (debounce-ish)
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+
+        var token = _searchCts.Token;
+
+        // небольшая задержка, чтобы не гонять API на каждое нажатие
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (TaskCanceledException) { return; }
+
+        if (string.IsNullOrWhiteSpace(SearchText))
+        {
+            SearchResults.Clear();
+            IsSearching = false;
+            return;
+        }
+
+        IsSearching = true;
+
+        try
+        {
+            var results = await _service.SearchStocksAsync(SearchText);
+
+            if (token.IsCancellationRequested) return;
+
+            SearchResults.Clear();
+            foreach (var r in results.Take(10))
+                SearchResults.Add(r);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[VM] Search EX: " + ex.Message);
+            SearchResults.Clear();
+        }
+    }
+
+    // Добавить тикер в список (по клику на результат поиска)
+    public async Task AddTickerAsync(SearchResult result)
+    {
+        if (result == null) return;
+
+        // Избегаем дубликатов (без учета регистра)
+        if (Stocks.Any(s => string.Equals(s.Symbol, result.Symbol, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        var newStock = new Stock { Symbol = result.Symbol, Price = 0m };
+        MainThread.BeginInvokeOnMainThread(() => Stocks.Add(newStock));
+
+        try
+        {
+            var updated = await _service.GetStockAsync(result.Symbol);
+            if (updated != null)
+            {
+                MainThread.BeginInvokeOnMainThread(() => newStock.Price = updated.Price);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[VM] AddTickerAsync EX: " + ex.Message);
+        }
+
+        // Сбрасываем поиск
+        SearchText = string.Empty;
+        SearchResults.Clear();
+        IsSearching = false;
     }
 
     #region INotifyPropertyChanged
