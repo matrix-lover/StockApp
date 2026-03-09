@@ -14,7 +14,7 @@ namespace StockApp.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    private readonly StockService _service = new MockStockService(); // для теста
+    private readonly StockService _service;
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
 
     public ObservableCollection<Stock> Stocks { get; } = new();
@@ -28,8 +28,9 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetProperty(ref _isRefreshing, value);
     }
 
-    public MainViewModel()
+    public MainViewModel(StockService? service = null)
     {
+        _service = service ?? new MockStockService();
         RefreshCommand = new Command(async () => await RefreshCommandExecute());
         _ = InitializeAsync();
     }
@@ -111,7 +112,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(30)); // интервал автообновления
+                await Task.Delay(TimeSpan.FromSeconds(60)); // интервал автообновления
 
                 // Попробовать захватить лок, но не ждать. Если не удалось — пропустить этот проход.
                 if (!await _refreshLock.WaitAsync(0))
