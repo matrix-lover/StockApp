@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    x:Class="StockApp.MainPage"
+    Title="Stocks"
+    BackgroundColor="#121212">
+
+    <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}">
+        <CollectionView ItemsSource="{Binding Stocks}" Margin="10" SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Frame CornerRadius="12" Padding="10" Margin="5" BackgroundColor="#1E1E1E" HasShadow="True">
+                        <Grid ColumnDefinitions="*,Auto,Auto" VerticalOptions="Center">
+                            <Label Text="{Binding Symbol}" FontSize="20" FontAttributes="Bold" TextColor="White" VerticalOptions="Center"/>
+                            <Label Grid.Column="1" Text="{Binding DisplayPrice}" FontSize="20" TextColor="{Binding Color}" VerticalOptions="Center" HorizontalOptions="End"/>
+                            <Label Grid.Column="2" Text="{Binding Arrow}" FontSize="20" TextColor="{Binding Color}" VerticalOptions="Center" HorizontalOptions="End" Margin="5,0,0,0"/>
+                        </Grid>
+                    </Frame>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </RefreshView>
+</ContentPage>
