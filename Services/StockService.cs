@@ -1,3 +1,4 @@
+// Services/StockService.cs
 using System;
 using System.Net;
 using System.Net.Http;
@@ -9,43 +10,41 @@ using StockApp.Models;
 
 namespace StockApp.Services;
 
-public class StockService : IStockService
+public class StockService
 {
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
-    private readonly string _apiKey;
+    // временно оставляем пустой ключ — для реальной работы вставьте свой ключ
+    private const string ApiKey = "Здесь_ключ";
 
-    public StockService(string apiKey = "Мой_ключ_здесь")
+    public StockService()
     {
-        _apiKey = apiKey ?? "";
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("StockApp/1.0 (+https://example)");
         _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
     }
 
-    public async Task<Stock?> GetStockAsync(string symbol)
+    // Сделаем метод виртуальным и вернём Task<Stock?> (правильный тип)
+    public virtual async Task<Stock?> GetStockAsync(string symbol)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey))
+        if (string.IsNullOrWhiteSpace(ApiKey))
         {
-            Console.WriteLine("[StockService] Empty API key — skipping network call");
+            Console.WriteLine("[StockService] ApiKey is empty — skipping real network call");
             return null;
         }
 
-        var encoded = Uri.EscapeDataString(symbol);
-        var url = $"https://finnhub.io/api/v1/quote?symbol={encoded}&token={_apiKey}";
+        var encoded = HttpUtility.UrlEncode(symbol);
+        var url = $"https://finnhub.io/api/v1/quote?symbol={encoded}&token={ApiKey}";
 
         try
         {
             var resp = await _httpClient.GetAsync(url);
             var body = await resp.Content.ReadAsStringAsync();
-            Console.WriteLine($"[StockService] {symbol} HTTP {(int)resp.StatusCode} - {body}");
+            Console.WriteLine($"[StockService] TOKEN param HTTP {(int)resp.StatusCode} for {symbol}: {body}");
 
             if (!resp.IsSuccessStatusCode)
             {
-                if ((int)resp.StatusCode == 429) // rate limit
-                {
-                    Console.WriteLine("[StockService] Rate limited");
-                }
+                if ((int)resp.StatusCode == 429) Console.WriteLine("[StockService] Rate limited");
                 return null;
             }
 

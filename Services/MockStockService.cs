@@ -1,17 +1,18 @@
+// Services/MockStockService.cs
 using System;
 using System.Threading.Tasks;
 using StockApp.Models;
 
 namespace StockApp.Services;
 
-public class MockStockService : IStockService
+public class MockStockService : StockService
 {
     private readonly Random _r = new();
 
-    public async Task<Stock?> GetStockAsync(string symbol)
+    // override базовый виртуальный метод
+    public override async Task<Stock?> GetStockAsync(string symbol)
     {
-        // имитируем задержку сети и ненулевой ответ
-        await Task.Delay(200);
+        await Task.Delay(50); // имитация сети
         return new Stock
         {
             Symbol = symbol,

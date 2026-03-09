@@ -2,10 +2,11 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using Microsoft.Maui.Controls;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Controls;
 using StockApp.Models;
 using StockApp.Services;
 
@@ -13,7 +14,8 @@ namespace StockApp.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    private readonly IStockService _service;
+    private readonly StockService _service = new MockStockService(); // для теста
+    private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
 
     public ObservableCollection<Stock> Stocks { get; } = new();
 
@@ -26,51 +28,58 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetProperty(ref _isRefreshing, value);
     }
 
-    public MainViewModel(IStockService service)
+    public MainViewModel()
     {
-        _service = service ?? throw new ArgumentNullException(nameof(service));
         RefreshCommand = new Command(async () => await RefreshCommandExecute());
         _ = InitializeAsync();
     }
 
     private async Task InitializeAsync()
     {
-        // начальная загрузка (Mock/реальный сервис)
-        var symbols = new[] { "AAPL", "MSFT", "GOOG" };
+        var symbols = new[] { "AAPL","MSFT","GOOG","AMZN","TSLA","META","NVDA","NFLX","BABA","INTC","ADBE","ORCL","SAP","IBM" };
+
         foreach (var s in symbols)
         {
             var st = await _service.GetStockAsync(s) ?? new Stock { Symbol = s, Price = 0m };
             MainThread.BeginInvokeOnMainThread(() => Stocks.Add(st));
         }
+
+        // Запускаем автообновление в фоне (не трогает IsRefreshing)
+        _ = StartAutoRefresh();
     }
 
+    // Pull-to-refresh (с индикатором)
     private async Task RefreshCommandExecute()
     {
-        if (IsRefreshing) return;
+        // Попытка выполнить только одну ручную операцию
+        if (!await _refreshLock.WaitAsync(0))
+        {
+            Console.WriteLine("[VM] Manual refresh skipped because another refresh is running");
+            return;
+        }
 
-        IsRefreshing = true;
         try
         {
-            Console.WriteLine("[VM] RefreshCommandExecute START");
+            IsRefreshing = true;
+            Console.WriteLine("[VM] Manual refresh START");
             await RefreshStocksAsync();
-            Console.WriteLine("[VM] RefreshCommandExecute DONE");
+            Console.WriteLine("[VM] Manual refresh DONE");
         }
         catch (Exception ex)
         {
-            // важно логировать — исключения часто ломают flow
-            Console.WriteLine("[VM] Refresh EX: " + ex);
+            Console.WriteLine("[VM] Manual refresh EX: " + ex);
         }
         finally
         {
-            // ВСЕГДА сбрасываем флаг в finally — это решает "бесконечную загрузку"
             IsRefreshing = false;
-            Console.WriteLine("[VM] IsRefreshing set to false");
+            _refreshLock.Release();
+            Console.WriteLine("[VM] IsRefreshing set to false (manual)");
         }
     }
 
+    // Общая логика обновления (используется и auto, и manual)
     private async Task RefreshStocksAsync()
     {
-        // обновляем последовательно, чтобы не получить rate limit / не заблокировать UI
         foreach (var stock in Stocks)
         {
             try
@@ -78,7 +87,6 @@ public class MainViewModel : INotifyPropertyChanged
                 var updated = await _service.GetStockAsync(stock.Symbol);
                 if (updated != null)
                 {
-                    // обновление на UI-потоке
                     MainThread.BeginInvokeOnMainThread(() => stock.Price = updated.Price);
                 }
                 else
@@ -91,8 +99,43 @@ public class MainViewModel : INotifyPropertyChanged
                 Console.WriteLine($"[VM] exception updating {stock.Symbol}: {ex.Message}");
             }
 
-            // небольшая задержка между запросами — уменьшает риск 429
-            await Task.Delay(300);
+            // маленькая задержка, чтобы снизить вероятность rate-limit
+            await Task.Delay(200);
+        }
+    }
+
+    // Автообновление — НЕ трогает IsRefreshing; если ручной refresh идёт, авто пропускается
+    private async Task StartAutoRefresh()
+    {
+        while (true)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30)); // интервал автообновления
+
+                // Попробовать захватить лок, но не ждать. Если не удалось — пропустить этот проход.
+                if (!await _refreshLock.WaitAsync(0))
+                {
+                    Console.WriteLine("[VM] Auto refresh skipped because manual refresh is running");
+                    continue;
+                }
+
+                try
+                {
+                    Console.WriteLine("[VM] Auto refresh START");
+                    await RefreshStocksAsync();
+                    Console.WriteLine("[VM] Auto refresh DONE");
+                }
+                finally
+                {
+                    _refreshLock.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[VM] AutoRefresh EX: " + ex.Message);
+                await Task.Delay(5000);
+            }
         }
     }
 
