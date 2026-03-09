@@ -1043,3 +1043,4 @@
 /Users/user/stocksApp/StockApp/obj/Debug/net8.0-android/stamp/_GenerateJavaStubs.stamp
 /Users/user/stocksApp/StockApp/obj/Debug/net8.0-android/stamp/_GeneratePackageManagerJava.stamp
 /Users/user/stocksApp/StockApp/obj/Debug/net8.0-android/stamp/_ResolveLibraryProjectImports.stamp
+/Users/user/stocksApp/StockApp/obj/Debug/net8.0-android/StockApp.sourcelink.json

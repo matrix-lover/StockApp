@@ -22,18 +22,17 @@ public class Stock : INotifyPropertyChanged
                 _price = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(Color));
-                OnPropertyChanged(nameof(DisplayPrice)); // обновляем отображаемую цену
+                OnPropertyChanged(nameof(Arrow));
+                OnPropertyChanged(nameof(DisplayPrice));
             }
         }
     }
 
-    // цвет
     public string Color
     {
         get
         {
-            if (_previousPrice == 0 || _price == _previousPrice)
-                return "White";
+            if (_previousPrice == 0 || _price == _previousPrice) return "White";
             return _price > _previousPrice ? "Green" : "Red";
         }
     }
@@ -42,17 +41,14 @@ public class Stock : INotifyPropertyChanged
     {
         get
         {
-            if (_previousPrice == 0 || _price == _previousPrice)
-                return "→";
+            if (_previousPrice == 0 || _price == _previousPrice) return "→";
             return _price > _previousPrice ? "↑" : "↓";
         }
     }
 
-    // цена и валюта
     public string DisplayPrice => $"{Price:F2} {Currency}";
 
     public event PropertyChangedEventHandler? PropertyChanged;
-
     void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

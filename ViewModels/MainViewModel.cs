@@ -1,12 +1,11 @@
-// ViewModels/MainViewModel.cs
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using Microsoft.Maui.ApplicationModel; // MainThread
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.ApplicationModel;
 using StockApp.Models;
 using StockApp.Services;
 
@@ -14,13 +13,11 @@ namespace StockApp.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    private readonly StockService _service = new();
-    private readonly string[] _symbols =
-    {
-        "AAPL","MSFT","GOOG","AMZN","TSLA","META","NVDA","NFLX","BABA","INTC","ADBE","ORCL","SAP","IBM"
-    };
+    private readonly IStockService _service;
 
     public ObservableCollection<Stock> Stocks { get; } = new();
+
+    public ICommand RefreshCommand { get; }
 
     private bool _isRefreshing;
     public bool IsRefreshing
@@ -29,112 +26,79 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetProperty(ref _isRefreshing, value);
     }
 
-    public ICommand RefreshCommand { get; }
-
-    public MainViewModel()
+    public MainViewModel(IStockService service)
     {
+        _service = service ?? throw new ArgumentNullException(nameof(service));
         RefreshCommand = new Command(async () => await RefreshCommandExecute());
         _ = InitializeAsync();
     }
 
     private async Task InitializeAsync()
     {
-        Console.WriteLine("[VM] Initializing stocks...");
-
-        foreach (var symbol in _symbols)
+        // начальная загрузка (Mock/реальный сервис)
+        var symbols = new[] { "AAPL", "MSFT", "GOOG" };
+        foreach (var s in symbols)
         {
-            var stock = await _service.GetStockAsync(symbol);
-            if (stock != null)
-            {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    Stocks.Add(stock);
-                    Console.WriteLine($"[VM] Added {stock.Symbol} with price {stock.Price}");
-                });
-            }
-            else
-            {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    Stocks.Add(new Stock { Symbol = symbol, Price = 0m, Currency = "USD" });
-                    Console.WriteLine($"[VM] Added {symbol} with price 0 (failed to fetch)");
-                });
-            }
+            var st = await _service.GetStockAsync(s) ?? new Stock { Symbol = s, Price = 0m };
+            MainThread.BeginInvokeOnMainThread(() => Stocks.Add(st));
         }
-
-        // Запускаем автообновление каждые 15 секунд
-        _ = StartAutoRefresh();
-    }
-
-    private async Task StartAutoRefresh()
-    {
-        while (true)
-        {
-            try
-            {
-                await Task.Delay(15000); // 15 секунд
-
-                foreach (var stock in Stocks)
-                {
-                    var updated = await _service.GetStockAsync(stock.Symbol);
-                    if (updated != null)
-                    {
-                        MainThread.BeginInvokeOnMainThread(() =>
-                        {
-                            stock.Price = updated.Price;
-                            Console.WriteLine($"[VM] Updated {stock.Symbol} to {stock.Price}");
-                        });
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[VM] Failed to update {stock.Symbol}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[VM] AutoRefresh exception: {ex.Message}");
-            }
-        }
-    }
-
-    public async Task RefreshStocksAsync()
-    {
-        Console.WriteLine("[VM] Pull-to-refresh started...");
-
-        foreach (var stock in Stocks)
-        {
-            var updated = await _service.GetStockAsync(stock.Symbol);
-            if (updated != null)
-            {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    stock.Price = updated.Price;
-                    Console.WriteLine($"[VM] Pull-to-refresh updated {stock.Symbol} to {stock.Price}");
-                });
-            }
-            else
-            {
-                Console.WriteLine($"[VM] Pull-to-refresh failed for {stock.Symbol}");
-            }
-        }
-
-        Console.WriteLine("[VM] Pull-to-refresh completed");
     }
 
     private async Task RefreshCommandExecute()
     {
+        if (IsRefreshing) return;
+
         IsRefreshing = true;
-        await RefreshStocksAsync();
-        IsRefreshing = false;
+        try
+        {
+            Console.WriteLine("[VM] RefreshCommandExecute START");
+            await RefreshStocksAsync();
+            Console.WriteLine("[VM] RefreshCommandExecute DONE");
+        }
+        catch (Exception ex)
+        {
+            // важно логировать — исключения часто ломают flow
+            Console.WriteLine("[VM] Refresh EX: " + ex);
+        }
+        finally
+        {
+            // ВСЕГДА сбрасываем флаг в finally — это решает "бесконечную загрузку"
+            IsRefreshing = false;
+            Console.WriteLine("[VM] IsRefreshing set to false");
+        }
+    }
+
+    private async Task RefreshStocksAsync()
+    {
+        // обновляем последовательно, чтобы не получить rate limit / не заблокировать UI
+        foreach (var stock in Stocks)
+        {
+            try
+            {
+                var updated = await _service.GetStockAsync(stock.Symbol);
+                if (updated != null)
+                {
+                    // обновление на UI-потоке
+                    MainThread.BeginInvokeOnMainThread(() => stock.Price = updated.Price);
+                }
+                else
+                {
+                    Console.WriteLine($"[VM] update returned null for {stock.Symbol}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[VM] exception updating {stock.Symbol}: {ex.Message}");
+            }
+
+            // небольшая задержка между запросами — уменьшает риск 429
+            await Task.Delay(300);
+        }
     }
 
     #region INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
+    protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(backingStore, value)) return false;
