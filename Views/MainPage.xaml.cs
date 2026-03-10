@@ -11,7 +11,7 @@ public partial class MainPage : ContentPage
 	{
 		InitializeComponent();
 
-		var apiKey = "d6hgbk9r01qr5k4bruogd6hgbk9r01qr5k4brup0";
+		var apiKey = "key";
 		StockService service = string.IsNullOrWhiteSpace(apiKey) ? new MockStockService() : new StockService(apiKey);
 
 		BindingContext = new MainViewModel(service);
@@ -38,6 +38,27 @@ public partial class MainPage : ContentPage
 				vm2.SearchResults.Clear();
 				vm2.IsSearching = false;
 			}
+		}
+	}
+
+	private async void OnDeleteStock(object sender, EventArgs e)
+	{
+		var swipeItem = sender as SwipeItem;
+		var stock = swipeItem?.BindingContext as Stock;
+
+		if (stock == null)
+			return;
+
+		bool confirm = await DisplayAlert(
+			"Delete stock",
+			$"Delete {stock.Symbol} from list?",
+			"Yes",
+			"No");
+
+		if (confirm)
+		{
+			var vm = BindingContext as MainViewModel;
+			vm?.Stocks.Remove(stock);
 		}
 	}
 }

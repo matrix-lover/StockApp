@@ -12,6 +12,7 @@ using StockApp.Models;
 using StockApp.Services;
 using System.Windows.Input;
 
+
 namespace StockApp.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
@@ -22,6 +23,8 @@ public class MainViewModel : INotifyPropertyChanged
 
     public ObservableCollection<Stock> Stocks { get; } = new();
     public ObservableCollection<SearchResult> SearchResults { get; } = new();
+
+    private readonly StockStorageService storage = new();
 
     private string _searchText;
     public string SearchText
@@ -53,6 +56,12 @@ public class MainViewModel : INotifyPropertyChanged
 
     public MainViewModel(StockService? service = null)
     {
+        var savedStocks = storage.LoadStocks();
+
+        foreach (var stock in savedStocks)
+        {
+            Stocks.Add(stock);
+        }
         _service = service ?? new StockService("");
         RefreshCommand = new Command(async () => await RefreshCommandExecute());
 
@@ -61,9 +70,17 @@ public class MainViewModel : INotifyPropertyChanged
         _ = InitializeAsync();
     }
 
+    public void RemoveStock(Stock stock)
+    {
+        if (Stocks.Contains(stock))
+        {
+            Stocks.Remove(stock);
+        }
+    }
+
     private async Task InitializeAsync()
     {
-        var symbols = new[] { "AAPL","MSFT","GOOG","AMZN","TSLA" };
+        var symbols = new[] { "AAPL", "MSFT", "GOOG", "AMZN", "TSLA" };
         foreach (var s in symbols)
         {
             var st = await _service.GetStockAsync(s) ?? new Stock { Symbol = s, Price = 0m };
@@ -107,7 +124,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         while (true)
         {
-            await Task.Delay(TimeSpan.FromSeconds(60));
+            await Task.Delay(TimeSpan.FromSeconds(30));
             if (!await _refreshLock.WaitAsync(0)) continue;
             try { await RefreshStocksAsync(); } finally { _refreshLock.Release(); }
         }

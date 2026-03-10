@@ -1,0 +1,4 @@
+/Users/user/stocksApp/StockApp/bin/Release/net8.0-android/publish/com.companyname.stockapp-Signed.aab
+/Users/user/stocksApp/StockApp/bin/Release/net8.0-android/publish/com.companyname.stockapp.aab
+/Users/user/stocksApp/StockApp/bin/Release/net8.0-android/publish/com.companyname.stockapp-Signed.apk
+/Users/user/stocksApp/StockApp/bin/Release/net8.0-android/publish/_Microsoft.Android.Resource.Designer.dll
