@@ -19,23 +19,23 @@
             PlaceholderColor="Gray"
             Grid.Row="0"/>
 
-        <!-- SEARCH RESULTS (TapGesture) -->
+        <!-- SEARCH RESULTS с TapGesture через Command -->
         <CollectionView
             x:Name="SearchResultsCollectionView"
             ItemsSource="{Binding SearchResults}"
             HeightRequest="200"
             Margin="10,0"
             IsVisible="{Binding IsSearching}"
-            SelectionMode="None" 
+            SelectionMode="None"
             Grid.Row="1">
 
             <CollectionView.ItemTemplate>
                 <DataTemplate>
                     <Frame Padding="10" Margin="5" BackgroundColor="#1E1E1E" CornerRadius="10">
-                
-                        <!-- Tap на рамке (на всю карточку) -->
                         <Frame.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="SearchResultTapped" NumberOfTapsRequired="1" />
+                            <TapGestureRecognizer
+                                Command="{Binding BindingContext.AddTickerCommand, Source={x:Reference Name=SearchResultsCollectionView}}"
+                                CommandParameter="{Binding}" />
                         </Frame.GestureRecognizers>
 
                         <VerticalStackLayout>
@@ -59,13 +59,9 @@
                     <DataTemplate>
                         <Frame CornerRadius="12" Padding="10" Margin="5" BackgroundColor="#1E1E1E" HasShadow="True">
                             <Grid ColumnDefinitions="*,Auto,Auto" VerticalOptions="Center">
-
                                 <Label Text="{Binding Symbol}" FontSize="20" FontAttributes="Bold" TextColor="White" VerticalOptions="Center"/>
-
                                 <Label Grid.Column="1" Text="{Binding DisplayPrice}" FontSize="20" TextColor="{Binding Color}" VerticalOptions="Center" HorizontalOptions="End"/>
-
                                 <Label Grid.Column="2" Text="{Binding Arrow}" FontSize="20" TextColor="{Binding Color}" VerticalOptions="Center" HorizontalOptions="End" Margin="5,0,0,0"/>
-
                             </Grid>
                         </Frame>
                     </DataTemplate>

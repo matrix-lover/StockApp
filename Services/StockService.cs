@@ -24,11 +24,7 @@ public class StockService
 
     public virtual async Task<Stock?> GetStockAsync(string symbol)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey))
-        {
-            Debug.WriteLine("[StockService] ApiKey empty — skipping network call");
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(_apiKey)) return null;
 
         var encoded = HttpUtility.UrlEncode(symbol);
         var url = $"https://finnhub.io/api/v1/quote?symbol={encoded}&token={_apiKey}";
@@ -37,25 +33,14 @@ public class StockService
         {
             var resp = await _httpClient.GetAsync(url);
             var body = await resp.Content.ReadAsStringAsync();
-
             Debug.WriteLine($"[StockService] {symbol} HTTP {(int)resp.StatusCode} - {body}");
 
-            if (!resp.IsSuccessStatusCode)
-            {
-                if ((int)resp.StatusCode == 429)
-                    Debug.WriteLine("[StockService] Rate limited (429)");
-                return null;
-            }
+            if (!resp.IsSuccessStatusCode) return null;
 
             var q = JsonSerializer.Deserialize<FinnhubQuote>(body, _jsonOptions);
             if (q == null || q.c <= 0) return null;
 
-            return new Stock
-            {
-                Symbol = symbol,
-                Price = q.c,
-                Currency = "USD"
-            };
+            return new Stock { Symbol = symbol, Price = q.c, Currency = "USD" };
         }
         catch (Exception ex)
         {

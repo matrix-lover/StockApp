@@ -10,11 +10,13 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using StockApp.Models;
 using StockApp.Services;
+using System.Windows.Input;
 
 namespace StockApp.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
+    public ICommand AddTickerCommand { get; }
     private readonly StockService _service;
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
 
@@ -51,8 +53,11 @@ public class MainViewModel : INotifyPropertyChanged
 
     public MainViewModel(StockService? service = null)
     {
-        _service = service ?? new StockService(""); // Вставь свой API ключ
+        _service = service ?? new StockService("");
         RefreshCommand = new Command(async () => await RefreshCommandExecute());
+
+        AddTickerCommand = new Command<SearchResult>(async result => await AddTickerAsync(result));
+
         _ = InitializeAsync();
     }
 
@@ -119,7 +124,6 @@ public class MainViewModel : INotifyPropertyChanged
 
         IsSearching = true;
         var results = await _service.SearchStocksAsync(SearchText);
-
         SearchResults.Clear();
         foreach (var r in results.Take(10))
             SearchResults.Add(r);
@@ -129,9 +133,16 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (Stocks.Any(s => s.Symbol == result.Symbol)) return;
 
-        var st = await _service.GetStockAsync(result.Symbol);
-        if (st != null)
-            MainThread.BeginInvokeOnMainThread(() => Stocks.Add(st));
+        var stock = await _service.GetStockAsync(result.Symbol);
+        if (stock != null)
+        {
+            MainThread.BeginInvokeOnMainThread(() => Stocks.Add(stock));
+        }
+
+        // очищаем поиск после добавления
+        SearchText = string.Empty;
+        SearchResults.Clear();
+        IsSearching = false;
     }
 
     #region INotifyPropertyChanged
