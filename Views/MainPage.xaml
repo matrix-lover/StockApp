@@ -19,20 +19,25 @@
             PlaceholderColor="Gray"
             Grid.Row="0"/>
 
-        <!-- Search Results -->
+        <!-- SEARCH RESULTS (TapGesture) -->
         <CollectionView
             x:Name="SearchResultsCollectionView"
             ItemsSource="{Binding SearchResults}"
             HeightRequest="200"
             Margin="10,0"
             IsVisible="{Binding IsSearching}"
-            SelectionMode="Single"
-            SelectionChanged="SearchResults_SelectionChanged"
+            SelectionMode="None" 
             Grid.Row="1">
 
             <CollectionView.ItemTemplate>
                 <DataTemplate>
                     <Frame Padding="10" Margin="5" BackgroundColor="#1E1E1E" CornerRadius="10">
+                
+                        <!-- Tap на рамке (на всю карточку) -->
+                        <Frame.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="SearchResultTapped" NumberOfTapsRequired="1" />
+                        </Frame.GestureRecognizers>
+
                         <VerticalStackLayout>
                             <Label Text="{Binding DisplaySymbol}" TextColor="White" FontSize="18" FontAttributes="Bold"/>
                             <Label Text="{Binding Description}" TextColor="Gray" FontSize="14"/>

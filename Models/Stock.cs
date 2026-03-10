@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 
 namespace StockApp.Models;
 
@@ -11,6 +12,7 @@ public class Stock : INotifyPropertyChanged
     public string Symbol { get; set; } = "";
     public string Currency { get; set; } = "USD";
 
+    [JsonPropertyName("c")]
     public decimal Price
     {
         get => _price;

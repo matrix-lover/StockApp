@@ -21,13 +21,12 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<Stock> Stocks { get; } = new();
     public ObservableCollection<SearchResult> SearchResults { get; } = new();
 
-    private string _searchText = string.Empty;
+    private string _searchText;
     public string SearchText
     {
         get => _searchText;
         set
         {
-            if (_searchText == value) return;
             _searchText = value;
             OnPropertyChanged();
             Search();
@@ -50,57 +49,40 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetProperty(ref _isRefreshing, value);
     }
 
-    // Конструктор: можно передать реальный StockService или оставить пустым для Mock
     public MainViewModel(StockService? service = null)
     {
-        _service = service ?? new MockStockService();
+        _service = service ?? new StockService(""); // Вставь свой API ключ
         RefreshCommand = new Command(async () => await RefreshCommandExecute());
         _ = InitializeAsync();
     }
 
     private async Task InitializeAsync()
     {
-        var symbols = new[] { "AAPL","MSFT","GOOG","AMZN","TSLA","META","NVDA","NFLX","BABA","INTC","ADBE","ORCL","SAP","IBM" };
-
+        var symbols = new[] { "AAPL","MSFT","GOOG","AMZN","TSLA" };
         foreach (var s in symbols)
         {
             var st = await _service.GetStockAsync(s) ?? new Stock { Symbol = s, Price = 0m };
             MainThread.BeginInvokeOnMainThread(() => Stocks.Add(st));
         }
 
-        // Запускаем автообновление в фоне (не трогает IsRefreshing)
         _ = StartAutoRefresh();
     }
 
-    // Pull-to-refresh (с индикатором)
     private async Task RefreshCommandExecute()
     {
-        if (!await _refreshLock.WaitAsync(0))
-        {
-            Console.WriteLine("[VM] Manual refresh skipped because another refresh is running");
-            return;
-        }
-
+        if (!await _refreshLock.WaitAsync(0)) return;
         try
         {
             IsRefreshing = true;
-            Console.WriteLine("[VM] Manual refresh START");
             await RefreshStocksAsync();
-            Console.WriteLine("[VM] Manual refresh DONE");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("[VM] Manual refresh EX: " + ex);
         }
         finally
         {
             IsRefreshing = false;
             _refreshLock.Release();
-            Console.WriteLine("[VM] IsRefreshing set to false (manual)");
         }
     }
 
-    // Общая логика обновления (используется и auto, и manual)
     private async Task RefreshStocksAsync()
     {
         foreach (var stock in Stocks)
@@ -109,135 +91,53 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 var updated = await _service.GetStockAsync(stock.Symbol);
                 if (updated != null)
-                {
                     MainThread.BeginInvokeOnMainThread(() => stock.Price = updated.Price);
-                }
-                else
-                {
-                    Console.WriteLine($"[VM] update returned null for {stock.Symbol}");
-                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[VM] exception updating {stock.Symbol}: {ex.Message}");
-            }
-
-            // маленькая задержка, чтобы снизить вероятность rate-limit
+            catch { }
             await Task.Delay(200);
         }
     }
 
-    // Автообновление — НЕ трогает IsRefreshing; если ручной refresh идёт, авто пропускается
     private async Task StartAutoRefresh()
     {
         while (true)
         {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(60)); // интервал автообновления
-
-                if (!await _refreshLock.WaitAsync(0))
-                {
-                    Console.WriteLine("[VM] Auto refresh skipped because manual refresh is running");
-                    continue;
-                }
-
-                try
-                {
-                    Console.WriteLine("[VM] Auto refresh START");
-                    await RefreshStocksAsync();
-                    Console.WriteLine("[VM] Auto refresh DONE");
-                }
-                finally
-                {
-                    _refreshLock.Release();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[VM] AutoRefresh EX: " + ex.Message);
-                await Task.Delay(5000);
-            }
+            await Task.Delay(TimeSpan.FromSeconds(60));
+            if (!await _refreshLock.WaitAsync(0)) continue;
+            try { await RefreshStocksAsync(); } finally { _refreshLock.Release(); }
         }
     }
 
-    // Поиск (вызывается при изменении SearchText)
-    private CancellationTokenSource? _searchCts;
     private async void Search()
     {
-        // отмена предыдущего незавершённого поиска (debounce-ish)
-        _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();
-
-        var token = _searchCts.Token;
-
-        // небольшая задержка, чтобы не гонять API на каждое нажатие
-        try
-        {
-            await Task.Delay(300, token);
-        }
-        catch (TaskCanceledException) { return; }
-
         if (string.IsNullOrWhiteSpace(SearchText))
         {
-            SearchResults.Clear();
             IsSearching = false;
+            SearchResults.Clear();
             return;
         }
 
         IsSearching = true;
+        var results = await _service.SearchStocksAsync(SearchText);
 
-        try
-        {
-            var results = await _service.SearchStocksAsync(SearchText);
-
-            if (token.IsCancellationRequested) return;
-
-            SearchResults.Clear();
-            foreach (var r in results.Take(10))
-                SearchResults.Add(r);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("[VM] Search EX: " + ex.Message);
-            SearchResults.Clear();
-        }
+        SearchResults.Clear();
+        foreach (var r in results.Take(10))
+            SearchResults.Add(r);
     }
 
-    // Добавить тикер в список (по клику на результат поиска)
     public async Task AddTickerAsync(SearchResult result)
     {
-        if (result == null) return;
+        if (Stocks.Any(s => s.Symbol == result.Symbol)) return;
 
-        // Избегаем дубликатов (без учета регистра)
-        if (Stocks.Any(s => string.Equals(s.Symbol, result.Symbol, StringComparison.OrdinalIgnoreCase)))
-            return;
-
-        var newStock = new Stock { Symbol = result.Symbol, Price = 0m };
-        MainThread.BeginInvokeOnMainThread(() => Stocks.Add(newStock));
-
-        try
-        {
-            var updated = await _service.GetStockAsync(result.Symbol);
-            if (updated != null)
-            {
-                MainThread.BeginInvokeOnMainThread(() => newStock.Price = updated.Price);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("[VM] AddTickerAsync EX: " + ex.Message);
-        }
-
-        // Сбрасываем поиск
-        SearchText = string.Empty;
-        SearchResults.Clear();
-        IsSearching = false;
+        var st = await _service.GetStockAsync(result.Symbol);
+        if (st != null)
+            MainThread.BeginInvokeOnMainThread(() => Stocks.Add(st));
     }
 
     #region INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
-    protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(backingStore, value)) return false;

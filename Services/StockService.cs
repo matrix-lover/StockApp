@@ -1,8 +1,8 @@
-// Services/StockService.cs
 using System;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using System.Web;
 using StockApp.Models;
 
@@ -10,24 +10,23 @@ namespace StockApp.Services;
 
 public class StockService
 {
-    private readonly HttpClient _httpClient;
-    private readonly JsonSerializerOptions _jsonOptions;
     private readonly string _apiKey;
-
-    // Передавайте ключ в конструкторе. Для локального теста можно временно указать строку тут.
-    public StockService(string apiKey = "key")
+    private readonly HttpClient _httpClient = new HttpClient();
+    private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
     {
-        _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("StockApp/1.0 (+https://example)");
-        _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        PropertyNameCaseInsensitive = true
+    };
+
+    public StockService(string apiKey)
+    {
+        _apiKey = apiKey;
     }
 
-    public virtual async Task<Stock> GetStockAsync(string symbol)
+    public virtual async Task<Stock?> GetStockAsync(string symbol)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            Console.WriteLine("[StockService] ApiKey empty — skipping network call");
+            Debug.WriteLine("[StockService] ApiKey empty — skipping network call");
             return null;
         }
 
@@ -38,47 +37,55 @@ public class StockService
         {
             var resp = await _httpClient.GetAsync(url);
             var body = await resp.Content.ReadAsStringAsync();
-            Console.WriteLine($"[StockService] {symbol} HTTP {(int)resp.StatusCode} - {body}");
+
+            Debug.WriteLine($"[StockService] {symbol} HTTP {(int)resp.StatusCode} - {body}");
 
             if (!resp.IsSuccessStatusCode)
             {
-                if ((int)resp.StatusCode == 429) Console.WriteLine("[StockService] Rate limited (429)");
+                if ((int)resp.StatusCode == 429)
+                    Debug.WriteLine("[StockService] Rate limited (429)");
                 return null;
             }
 
             var q = JsonSerializer.Deserialize<FinnhubQuote>(body, _jsonOptions);
-            if (q == null) return null;
-            if (q.c <= 0) return null;
+            if (q == null || q.c <= 0) return null;
 
-            return new Stock { Symbol = symbol, Price = q.c, Currency = "USD" };
+            return new Stock
+            {
+                Symbol = symbol,
+                Price = q.c,
+                Currency = "USD"
+            };
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[StockService] Exception for {symbol}: {ex.Message}");
+            Debug.WriteLine($"[StockService] Exception for {symbol}: {ex.Message}");
             return null;
         }
     }
 
-    public async Task<List<SearchResult>> SearchStocksAsync(string query)
+    public virtual async Task<SearchResult[]> SearchStocksAsync(string query)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            return new List<SearchResult>();
+        if (string.IsNullOrWhiteSpace(_apiKey)) return Array.Empty<SearchResult>();
 
-        var url = $"https://finnhub.io/api/v1/search?q={query}&token={"key"}";
+        var encoded = HttpUtility.UrlEncode(query);
+        var url = $"https://finnhub.io/api/v1/search?q={encoded}&token={_apiKey}";
 
-        var response = await _httpClient.GetStringAsync(url);
+        try
+        {
+            var resp = await _httpClient.GetAsync(url);
+            var body = await resp.Content.ReadAsStringAsync();
+            Debug.WriteLine($"[StockService] Search '{query}' HTTP {(int)resp.StatusCode} - {body}");
 
-        var data = JsonSerializer.Deserialize<SearchResponse>(response);
+            if (!resp.IsSuccessStatusCode) return Array.Empty<SearchResult>();
 
-        return data?.Result ?? new List<SearchResult>();
-    }
-
-    private class FinnhubQuote
-    {
-        public decimal c { get; set; }    // current price
-        public decimal h { get; set; }    // high
-        public decimal l { get; set; }    // low
-        public decimal o { get; set; }    // open
-        public long t { get; set; }       // timestamp
+            var searchResponse = JsonSerializer.Deserialize<SearchResponse>(body, _jsonOptions);
+            return searchResponse?.Result?.ToArray() ?? Array.Empty<SearchResult>();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[StockService] Search exception for '{query}': {ex.Message}");
+            return Array.Empty<SearchResult>();
+        }
     }
 }

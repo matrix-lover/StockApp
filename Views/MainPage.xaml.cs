@@ -11,9 +11,7 @@ public partial class MainPage : ContentPage
 	{
 		InitializeComponent();
 
-		// Поставьте свой ключ сюда для реального Finnhub, либо оставьте пустым ("")
-		// чтобы использовать MockStockService.
-		var apiKey = ""; // <-- Вставьте ваш FINNHUB API KEY, если хотите реальный API
+		var apiKey = "ключ";
 
 		StockService service;
 		if (string.IsNullOrWhiteSpace(apiKey))
@@ -24,18 +22,14 @@ public partial class MainPage : ContentPage
 		BindingContext = new MainViewModel(service);
 	}
 
-	private async void SearchResults_SelectionChanged(object sender, SelectionChangedEventArgs e)
+	private async void SearchResultTapped(object? sender, EventArgs e)
 	{
-		if (e.CurrentSelection.FirstOrDefault() is SearchResult selected)
+		if (sender is Frame frame && frame.BindingContext is SearchResult result)
 		{
 			if (BindingContext is MainViewModel vm)
 			{
-				await vm.AddTickerAsync(selected);
+				await vm.AddTickerAsync(result);
 			}
-
-			// Сбрасываем selection чтобы можно было выбирать тот же элемент снова
-			if (sender is CollectionView cv)
-				cv.SelectedItem = null;
 		}
 	}
 }
