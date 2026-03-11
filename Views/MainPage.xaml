@@ -50,6 +50,7 @@
         <!-- Main Stock List -->
         <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}" Grid.Row="2">
             <CollectionView
+                x:Name="MainCollectionView"
                 ItemsSource="{Binding Stocks}"
                 Margin="10"
                 SelectionMode="None"
@@ -59,11 +60,12 @@
                     <DataTemplate>
                         <SwipeView>
                             <SwipeView.RightItems>
-                                <SwipeItems>
+                                <SwipeItems Mode="Reveal">
                                     <SwipeItem
                                         Text="Delete"
                                         BackgroundColor="Red"
-                                        Invoked="OnDeleteStock"/>
+                                        Command="{Binding BindingContext.RemoveStockCommand, Source={x:Reference MainCollectionView}}"
+                                        CommandParameter="{Binding}" />
                                 </SwipeItems>
                             </SwipeView.RightItems>
 
